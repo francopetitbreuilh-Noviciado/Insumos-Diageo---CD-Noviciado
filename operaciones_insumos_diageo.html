@@ -85,9 +85,41 @@
   .dot.off{background:var(--crit);}
 
   .empty{text-align:center;color:var(--ink-soft);font-size:13.5px;padding:20px 0;}
+
+  .lock-screen{
+    position:fixed;inset:0;background:var(--paper);z-index:999;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .lock-card{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:32px 28px;max-width:340px;width:100%;text-align:center;
+  }
+  .lock-card small{text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--ink-soft);}
+  .lock-card h2{margin:6px 0 18px;font-size:17px;}
+  .lock-card input{
+    width:100%;border:1px solid var(--line);border-radius:9px;padding:11px 12px;
+    font-size:14.5px;text-align:center;letter-spacing:.15em;margin-bottom:10px;
+  }
+  .lock-card button{
+    width:100%;background:var(--blue);color:#fff;border:none;border-radius:9px;
+    padding:11px;font-size:14px;font-weight:700;cursor:pointer;
+  }
+  .lock-card button:hover{background:var(--blue-dark);}
+  .lock-error{color:var(--crit);font-size:12.5px;margin:0 0 10px;min-height:16px;}
+  body.locked > *:not(.lock-screen){display:none !important;}
 </style>
 </head>
-<body>
+<body class="locked">
+
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-card">
+    <small>ID Logistics · Diageo · CD Noviciado</small>
+    <h2>Acceso al inventario</h2>
+    <p class="lock-error" id="lockError"></p>
+    <input type="password" id="lockInput" placeholder="Clave de acceso" onkeydown="if(event.key==='Enter') checkLock()">
+    <button onclick="checkLock()">Ingresar</button>
+  </div>
+</div>
 
 <header>
   <small>ID Logistics · CD Noviciado · Cuenta Diageo</small>
@@ -135,7 +167,27 @@ const firebaseConfig = {
   appId: "1:347815927943:web:97a1a1c761d47a06a21822",
   messagingSenderId: "347815927943"
 };
+
+/* Clave de acceso simple — debe ser IDÉNTICA a la que
+   configuraste en admin_insumos_diageo.html. */
+const ACCESS_CODE = "diageo2026";
 /* ===================================================== */
+
+const LOCK_KEY = "insumos_diageo_unlocked";
+if (localStorage.getItem(LOCK_KEY) === "yes") {
+  document.body.classList.remove("locked");
+  document.getElementById("lockScreen").style.display = "none";
+}
+function checkLock(){
+  const val = document.getElementById("lockInput").value;
+  if (val === ACCESS_CODE){
+    localStorage.setItem(LOCK_KEY, "yes");
+    document.body.classList.remove("locked");
+    document.getElementById("lockScreen").style.display = "none";
+  } else {
+    document.getElementById("lockError").textContent = "Clave incorrecta, intenta de nuevo.";
+  }
+}
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
