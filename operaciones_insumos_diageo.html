@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retiro de Insumos · Diageo · CD Noviciado</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --blue:#0028A0;
+    --blue-dark:#001B6E;
+    --red:#C03020;
+    --ink:#1B2130;
+    --ink-soft:#5B6478;
+    --paper:#F5F6FA;
+    --card:#FFFFFF;
+    --line:#E3E6EF;
+    --ok:#1E8E5A;
+    --ok-bg:#E7F6EE;
+    --warn:#B8790A;
+    --warn-bg:#FDF2DF;
+    --crit:#C03020;
+    --crit-bg:#FBEAE8;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Arial,sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  header{
+    background:linear-gradient(135deg,var(--blue) 0%,var(--blue-dark) 100%);
+    color:#fff;padding:22px 20px;text-align:center;
+  }
+  header small{text-transform:uppercase;letter-spacing:.14em;font-size:11px;opacity:.75;}
+  header h1{margin:4px 0 0;font-size:20px;}
+
+  main{max-width:640px;margin:0 auto;padding:22px 16px 60px;}
+
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;margin-bottom:16px;
+  }
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
+  .field input, .field select{
+    width:100%;border:1px solid var(--line);border-radius:9px;padding:11px 12px;
+    font-size:14.5px;font-family:inherit;background:#fff;
+  }
+
+  .item-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:6px;}
+  .item-card{
+    border:1px solid var(--line);border-radius:9px;padding:12px 14px;
+    display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+    transition:border-color .15s;
+  }
+  .item-card.selected{border-color:var(--blue);background:#F1F4FC;}
+  .item-card .name{font-weight:600;font-size:14px;}
+  .item-card .stock{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+  .badge.ok{background:var(--ok-bg);color:var(--ok);}
+  .badge.warn{background:var(--warn-bg);color:var(--warn);}
+  .badge.crit{background:var(--crit-bg);color:var(--crit);}
+
+  button{
+    width:100%;border:none;border-radius:9px;background:var(--blue);color:#fff;
+    font-size:15px;font-weight:700;padding:13px;cursor:pointer;font-family:inherit;
+  }
+  button:hover{background:var(--blue-dark);}
+  button:disabled{background:#C7CCDB;cursor:not-allowed;}
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--ok);color:#fff;padding:12px 20px;border-radius:9px;
+    font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;
+  }
+  .toast.show{opacity:1;}
+  .toast.error{background:var(--crit);}
+
+  .status-bar{display:flex;align-items:center;gap:7px;justify-content:center;font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:#4FE38C;}
+  .dot.off{background:var(--crit);}
+
+  .empty{text-align:center;color:var(--ink-soft);font-size:13.5px;padding:20px 0;}
+</style>
+</head>
+<body>
+
+<header>
+  <small>ID Logistics · CD Noviciado · Cuenta Diageo</small>
+  <h1>Registro de Retiro de Insumos</h1>
+</header>
+
+<main>
+  <div class="status-bar"><span class="dot off" id="connDot"></span><span id="connText">Conectando…</span></div>
+
+  <div class="card">
+    <div class="field">
+      <label>Tu nombre</label>
+      <input id="fEncargado" placeholder="Ej: Juan Pérez">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="field" style="margin-bottom:10px;">
+      <label>Insumo a retirar</label>
+    </div>
+    <div class="item-grid" id="itemGrid"></div>
+    <div class="empty" id="emptyItems" style="display:none;">Aún no hay insumos cargados en el inventario.</div>
+  </div>
+
+  <div class="card">
+    <div class="field">
+      <label>Cantidad a retirar</label>
+      <input id="fCantidad" type="number" min="1" value="1">
+    </div>
+    <button id="submitBtn" onclick="registrarRetiro()" disabled>Selecciona un insumo</button>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================
+   CONFIGURACIÓN — usa el mismo firebaseConfig que en
+   admin_insumos_diageo.html para que ambos archivos
+   compartan el mismo inventario en tiempo real.
+   ===================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDslFUdRtdFoLu9EgY1kRjW0K-JdDYQBmo",
+  databaseURL: "https://epp-noviciado-default-rtdb.firebaseio.com",
+  appId: "1:347815927943:web:97a1a1c761d47a06a21822",
+  messagingSenderId: "347815927943"
+};
+/* ===================================================== */
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const itemsRef = db.ref("insumos/items");
+const historyRef = db.ref("insumos/historial");
+
+let items = {};
+let selectedId = null;
+
+db.ref(".info/connected").on("value", snap => {
+  const ok = snap.val() === true;
+  document.getElementById("connDot").classList.toggle("off", !ok);
+  document.getElementById("connText").textContent = ok ? "Conectado en tiempo real" : "Sin conexión";
+});
+
+itemsRef.on("value", snap => {
+  items = snap.val() || {};
+  renderItems();
+});
+
+function estadoOf(item){
+  const stock = Number(item.stock || 0);
+  const min = Number(item.minimo || 0);
+  if (stock <= 0) return "crit";
+  if (stock < min) return "warn";
+  return "ok";
+}
+function estadoLabel(e){
+  return e === "crit" ? "Sin stock" : e === "warn" ? "Stock bajo" : "Stock OK";
+}
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function renderItems(){
+  const grid = document.getElementById("itemGrid");
+  grid.innerHTML = "";
+  const entries = Object.entries(items);
+  document.getElementById("emptyItems").style.display = entries.length ? "none" : "block";
+
+  entries.forEach(([id, i]) => {
+    const e = estadoOf(i);
+    const div = document.createElement("div");
+    div.className = "item-card" + (id === selectedId ? " selected" : "");
+    div.onclick = () => { selectedId = id; renderItems(); updateSubmitBtn(); };
+    div.innerHTML = `
+      <div>
+        <div class="name">${escapeHtml(i.nombre||"")}</div>
+        <div class="stock">${i.stock ?? 0} ${escapeHtml(i.unidad||"")} disponibles</div>
+      </div>
+      <span class="badge ${e}">${estadoLabel(e)}</span>`;
+    grid.appendChild(div);
+  });
+  updateSubmitBtn();
+}
+
+function updateSubmitBtn(){
+  const btn = document.getElementById("submitBtn");
+  if (!selectedId){
+    btn.disabled = true;
+    btn.textContent = "Selecciona un insumo";
+  } else {
+    btn.disabled = false;
+    btn.textContent = "Registrar retiro";
+  }
+}
+
+function showToast(msg, isError){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.toggle("error", !!isError);
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+function registrarRetiro(){
+  const encargado = document.getElementById("fEncargado").value.trim();
+  const cantidad = Number(document.getElementById("fCantidad").value || 0);
+
+  if (!encargado){ showToast("Ingresa tu nombre.", true); return; }
+  if (!selectedId){ showToast("Selecciona un insumo.", true); return; }
+  if (cantidad <= 0){ showToast("La cantidad debe ser mayor a 0.", true); return; }
+
+  const item = items[selectedId];
+  const stockActual = Number(item.stock || 0);
+  if (cantidad > stockActual){
+    showToast(`Solo hay ${stockActual} ${item.unidad||""} disponibles.`, true);
+    return;
+  }
+
+  const nuevoStock = stockActual - cantidad;
+  itemsRef.child(selectedId).update({ stock: nuevoStock });
+
+  historyRef.push({
+    insumo: item.nombre,
+    cantidad,
+    encargado,
+    fecha: new Date().toLocaleString("es-CL")
+  });
+
+  showToast("Retiro registrado correctamente.");
+  document.getElementById("fCantidad").value = 1;
+  selectedId = null;
+  renderItems();
+}
+</script>
+</body>
+</html>
